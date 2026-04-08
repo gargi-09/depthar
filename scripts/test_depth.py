@@ -8,10 +8,11 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from core.depth_estimator import DepthEstimator
 from core.segmentor import Segmentor
 from core.occlusion_reasoner import OcclusionReasoner
+from ar.renderer import ARRenderer
 
 def main():
-    depth_estimator   = DepthEstimator()
-    segmentor         = Segmentor()
+    depth_estimator    = DepthEstimator()
+    segmentor          = Segmentor()
     occlusion_reasoner = OcclusionReasoner(
         depth_threshold=0.4,
         boundary_kernel=15,
@@ -23,16 +24,29 @@ def main():
         print("Error: could not open webcam.")
         return
 
+    # get actual webcam frame size for renderer
+    ret, test_frame = cap.read()
+    if not ret:
+        print("Error: could not read from webcam.")
+        return
+
+    frame_h, frame_w = test_frame.shape[:2]
+    renderer = ARRenderer(frame_w=frame_w, frame_h=frame_h)
+
     DEPTH_SKIP = 3
     SEG_SKIP   = 5
     frame_idx  = 0
     DISPLAY_W  = 400
     DISPLAY_H  = 225
 
-    print("Running pipeline — press Q to quit.")
+    print("Running DepthAR — press Q to quit.")
+    print("Controls:")
+    print("  Q — quit")
 
-    depth         = None
-    mask          = None
+    depth     = None
+    mask      = None
+    occlusion = None
+
     depth_colored = np.zeros((DISPLAY_H, DISPLAY_W, 3), dtype=np.uint8)
     seg_vis       = np.zeros((DISPLAY_H, DISPLAY_W, 3), dtype=np.uint8)
     occ_vis       = np.zeros((DISPLAY_H, DISPLAY_W, 3), dtype=np.uint8)
@@ -60,34 +74,44 @@ def main():
                 cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR),
                 (DISPLAY_W, DISPLAY_H)
             )
-            
-        # run occlusion reasoner when both depth and mask are available
+
+        # run occlusion reasoner
         if depth is not None and mask is not None:
-            # ensure depth and mask are the same size before reasoning
             depth_resized = cv2.resize(depth, (w, h), interpolation=cv2.INTER_LINEAR)
-            mask_resized  = cv2.resize(mask, (w, h),  interpolation=cv2.INTER_NEAREST)
+            mask_resized  = cv2.resize(mask,  (w, h), interpolation=cv2.INTER_NEAREST)
+            occlusion     = occlusion_reasoner.predict(depth_resized, mask_resized)
+            occ_colored   = cv2.applyColorMap(occlusion, cv2.COLORMAP_VIRIDIS)
+            occ_vis       = cv2.resize(occ_colored, (DISPLAY_W, DISPLAY_H))
 
-            occlusion = occlusion_reasoner.predict(depth_resized, mask_resized)
-            occ_colored = cv2.applyColorMap(occlusion, cv2.COLORMAP_VIRIDIS)
-            occ_vis = cv2.resize(occ_colored, (DISPLAY_W, DISPLAY_H))
+        # AR compositing — only when occlusion mask is ready
+        if occlusion is not None:
+            ar_frame = renderer.composite(
+                frame,
+                occlusion,
+                position=np.array([2.5, 0.8, 7.0], dtype=np.float32),
+                scale=120.0
+            )
+        else:
+            ar_frame = frame.copy()
 
-        # resize raw frame
-        frame_s = cv2.resize(frame, (DISPLAY_W, DISPLAY_H))
+        # resize all panels for display
+        frame_s  = cv2.resize(frame,    (DISPLAY_W, DISPLAY_H))
+        ar_s     = cv2.resize(ar_frame, (DISPLAY_W, DISPLAY_H))
 
         # add labels
         for img, label in zip(
-            [frame_s, depth_colored, seg_vis, occ_vis],
-            ["raw", "depth", "person mask", "occlusion mask"]
+            [frame_s, ar_s, seg_vis, occ_vis],
+            ["raw", "DepthAR", "person mask", "occlusion mask"]
         ):
             cv2.putText(img, label, (10, 25),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
-        # 2x2 grid
-        top_row    = np.hstack([frame_s, depth_colored])
+        # 2x2 grid: raw | AR output / person mask | occlusion mask
+        top_row    = np.hstack([frame_s, ar_s])
         bottom_row = np.hstack([seg_vis, occ_vis])
         combined   = np.vstack([top_row, bottom_row])
 
-        cv2.imshow("DepthAR — raw | depth | mask | occlusion", combined)
+        cv2.imshow("DepthAR", combined)
 
         frame_idx += 1
         if cv2.waitKey(1) & 0xFF == ord("q"):
