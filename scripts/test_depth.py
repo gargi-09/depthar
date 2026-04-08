@@ -10,13 +10,33 @@ from core.segmentor import Segmentor
 from core.occlusion_reasoner import OcclusionReasoner
 from ar.renderer import ARRenderer
 
+def draw_hud(frame, position, mode):
+    """Draw minimal HUD overlay showing controls and cube position."""
+    h, w = frame.shape[:2]
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (0, h - 80), (w, h), (0, 0, 0), -1)
+    frame = cv2.addWeighted(overlay, 0.5, frame, 0.5, 0)
+
+    controls = "W/S: forward/back  |  A/D: left/right  |  I/K: up/down  |  TAB: debug  |  Q: quit"
+    pos_text = f"cube position: x={position[0]:.1f}  y={position[1]:.1f}  z={position[2]:.1f}"
+
+    cv2.putText(frame, controls, (10, h - 50),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.42, (200, 200, 200), 1, cv2.LINE_AA)
+    cv2.putText(frame, pos_text, (10, h - 20),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.42, (100, 255, 100), 1, cv2.LINE_AA)
+
+    mode_label = "MODE: DEBUG" if mode == "debug" else "MODE: AR"
+    cv2.putText(frame, mode_label, (w - 140, 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 100), 1, cv2.LINE_AA)
+    return frame
+
 def main():
     depth_estimator    = DepthEstimator()
     segmentor          = Segmentor()
     occlusion_reasoner = OcclusionReasoner(
-        depth_threshold=0.4,
+        depth_threshold=0.35,
         boundary_kernel=15,
-        alpha=0.7
+        alpha=0.8
     )
 
     cap = cv2.VideoCapture(0)
@@ -24,7 +44,6 @@ def main():
         print("Error: could not open webcam.")
         return
 
-    # get actual webcam frame size for renderer
     ret, test_frame = cap.read()
     if not ret:
         print("Error: could not read from webcam.")
@@ -39,17 +58,27 @@ def main():
     DISPLAY_W  = 400
     DISPLAY_H  = 225
 
-    print("Running DepthAR — press Q to quit.")
-    print("Controls:")
-    print("  Q — quit")
+    # cube state
+    # cube state
+    position  = np.array([3.5,  0.5, 8.0], dtype=np.float32)
+    rotation  = np.array([0.3,  0.5, 0.1], dtype=np.float32)
+    rot_speed = np.array([0.005, 0.01, 0.002], dtype=np.float32)
+    scale     = 80.0
+    MOVE_STEP = 0.3
 
-    depth     = None
-    mask      = None
-    occlusion = None
+    # display mode: "ar" = fullscreen AR, "debug" = 2x2 grid
+    display_mode = "ar"
 
+    depth         = None
+    mask          = None
+    occlusion     = None
     depth_colored = np.zeros((DISPLAY_H, DISPLAY_W, 3), dtype=np.uint8)
     seg_vis       = np.zeros((DISPLAY_H, DISPLAY_W, 3), dtype=np.uint8)
     occ_vis       = np.zeros((DISPLAY_H, DISPLAY_W, 3), dtype=np.uint8)
+
+    cv2.namedWindow("DepthAR", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("DepthAR", 800, 500)
+    print("DepthAR running — press Q to quit, TAB to toggle debug view.")
 
     while True:
         ret, frame = cap.read()
@@ -57,6 +86,9 @@ def main():
             break
 
         h, w = frame.shape[:2]
+
+        # animate cube rotation every frame (cheap — no model inference)
+        rotation = rotation + rot_speed
 
         # run depth
         if frame_idx % DEPTH_SKIP == 0:
@@ -83,39 +115,58 @@ def main():
             occ_colored   = cv2.applyColorMap(occlusion, cv2.COLORMAP_VIRIDIS)
             occ_vis       = cv2.resize(occ_colored, (DISPLAY_W, DISPLAY_H))
 
-        # AR compositing — only when occlusion mask is ready
+        # AR compositing
         if occlusion is not None:
             ar_frame = renderer.composite(
-                frame,
-                occlusion,
-                position=np.array([2.5, 0.8, 7.0], dtype=np.float32),
-                scale=120.0
+                frame, occlusion,
+                position=np.array([1.2, 0.2, 5.0], dtype=np.float32),
+                scale=60.0
             )
         else:
             ar_frame = frame.copy()
 
-        # resize all panels for display
-        frame_s  = cv2.resize(frame,    (DISPLAY_W, DISPLAY_H))
-        ar_s     = cv2.resize(ar_frame, (DISPLAY_W, DISPLAY_H))
+        # display
+        if display_mode == "ar":
+            ar_frame = draw_hud(ar_frame, position, display_mode)
+            cv2.imshow("DepthAR", ar_frame)
 
-        # add labels
-        for img, label in zip(
-            [frame_s, ar_s, seg_vis, occ_vis],
-            ["raw", "DepthAR", "person mask", "occlusion mask"]
-        ):
-            cv2.putText(img, label, (10, 25),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        else:  # debug grid
+            frame_s = cv2.resize(frame,    (DISPLAY_W, DISPLAY_H))
+            ar_s    = cv2.resize(ar_frame, (DISPLAY_W, DISPLAY_H))
 
-        # 2x2 grid: raw | AR output / person mask | occlusion mask
-        top_row    = np.hstack([frame_s, ar_s])
-        bottom_row = np.hstack([seg_vis, occ_vis])
-        combined   = np.vstack([top_row, bottom_row])
+            for img, label in zip(
+                [frame_s, ar_s, seg_vis, occ_vis],
+                ["raw", "DepthAR", "person mask", "occlusion mask"]
+            ):
+                cv2.putText(img, label, (10, 25),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
-        cv2.imshow("DepthAR", combined)
+            top_row    = np.hstack([frame_s, ar_s])
+            bottom_row = np.hstack([seg_vis, occ_vis])
+            combined   = np.vstack([top_row, bottom_row])
+            combined   = draw_hud(combined, position, display_mode)
+            cv2.imshow("DepthAR", combined)
 
         frame_idx += 1
-        if cv2.waitKey(1) & 0xFF == ord("q"):
+
+        # keyboard controls
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord("q"):
             break
+        elif key == 9:  # TAB
+            display_mode = "debug" if display_mode == "ar" else "ar"
+        elif key == ord("a"):
+            position[0] -= MOVE_STEP   # move left
+        elif key == ord("d"):
+            position[0] += MOVE_STEP   # move right
+        elif key == ord("w"):
+            position[2] -= MOVE_STEP   # move closer
+        elif key == ord("s"):
+            position[2] += MOVE_STEP   # move farther
+        elif key == ord("i"):
+            position[1] -= MOVE_STEP   # move up
+        elif key == ord("k"):
+            position[1] += MOVE_STEP   # move down
 
     cap.release()
     cv2.destroyAllWindows()

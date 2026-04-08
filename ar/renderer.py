@@ -17,7 +17,7 @@ class ARRenderer:
         self.frame_h = frame_h
 
         # camera intrinsics (approximate for a standard webcam)
-        self.focal_length = frame_w
+        self.focal_length = frame_w * 0.6   # was frame_w
         self.center       = (frame_w // 2, frame_h // 2)
         self.camera_matrix = np.array([
             [self.focal_length, 0,                 self.center[0]],

@@ -19,9 +19,9 @@ class OcclusionReasoner:
 
     def __init__(
         self,
-        depth_threshold: float = 0.4,
+        depth_threshold: float = 0.35,   # was 0.4
         boundary_kernel: int = 15,
-        alpha: float = 0.7
+        alpha: float = 0.8               # was 0.7
     ):
         """
         Args:
