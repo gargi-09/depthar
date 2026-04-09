@@ -171,10 +171,23 @@ class ARRenderer:
         # occlusion compositing:
         # where occlusion_mask = 255 (real foreground) → use original frame
         # where occlusion_mask = 0   (background)      → use virtual canvas
-        fg_mask = occlusion_mask.astype(np.float32) / 255.0
-        fg_mask = np.stack([fg_mask] * 3, axis=-1)  # (H, W, 3)
+        # feather the occlusion mask edges for smooth blending
+        # instead of a hard binary cutoff, we blur the boundary zone
+        # so the cube fades out naturally as it goes behind your body
+        # stronger interior masking — don't let cube bleed onto person
+        soft_mask = occlusion_mask.astype(np.float32)
+        soft_mask = cv2.bilateralFilter(soft_mask, d=9, sigmaColor=75, sigmaSpace=75)
+        blurred   = cv2.GaussianBlur(soft_mask, (21, 21), 0)
 
-        # ensure mask matches frame size
+        # hard interior + soft boundary
+        interior  = (soft_mask > 180).astype(np.float32)
+        boundary  = (soft_mask > 20).astype(np.float32) * (1 - interior)
+        soft_mask = interior * 255 + boundary * blurred
+        soft_mask = soft_mask / 255.0
+        soft_mask = np.clip(soft_mask, 0, 1)
+
+        fg_mask = np.stack([soft_mask] * 3, axis=-1)
+
         if fg_mask.shape[:2] != (h, w):
             fg_mask = cv2.resize(fg_mask, (w, h))
 

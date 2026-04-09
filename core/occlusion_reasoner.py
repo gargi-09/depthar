@@ -93,21 +93,12 @@ class OcclusionReasoner:
         return corrected
 
     def _smooth_mask(self, mask: np.ndarray) -> np.ndarray:
-        """
-        Clean up the final mask with morphological ops + gaussian blur.
-        Removes salt-and-pepper noise and softens edges for
-        more natural compositing.
-        """
-        # close small holes inside the foreground region
-        kernel  = np.ones((5, 5), np.uint8)
+        kernel  = np.ones((7, 7), np.uint8)
         cleaned = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
-
-        # remove isolated noise specks
         cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_OPEN, kernel)
 
-        # soft edge for natural blending (not hard binary cutout)
-        blurred = cv2.GaussianBlur(cleaned, (7, 7), 0)
-
+        # stronger blur for softer edges
+        blurred = cv2.GaussianBlur(cleaned, (21, 21), 0)
         return blurred
 
     def predict(
