@@ -1,3 +1,4 @@
+from PIL.ImageChops import overlay
 import cv2
 import numpy as np
 
@@ -55,13 +56,13 @@ class ARRenderer:
 
         # face colors (BGR) — semi-transparent fills
         self.face_colors = [
-            (255, 100,  50),   # back   — blue
-            ( 50, 200, 255),   # front  — yellow
-            (100, 255, 100),   # bottom — green
-            (255, 100, 255),   # top    — pink
-            (100, 100, 255),   # left   — red
-            (255, 200, 100),   # right  — cyan
-        ]
+                (40, 20, 20),
+                (40, 20, 20),
+                (40, 20, 20),
+                (40, 20, 20),
+                (40, 20, 20),
+                (40, 20, 20),
+            ]
 
     def _project_cube(
         self,
@@ -108,7 +109,7 @@ class ARRenderer:
             cv2.fillPoly(overlay, [pts], color)
 
         # blend overlay with original for transparency
-        result = cv2.addWeighted(overlay, alpha, canvas, 1 - alpha, 0)
+        result = cv2.addWeighted(overlay, 0.15, canvas, 0.85, 0)        
         return result
 
     def _draw_wireframe(

@@ -118,9 +118,9 @@ class ExosuitOverlay:
 
         # primary color: electric cyan-teal
         intensity  = int(160 + 95 * pulse)
-        primary    = (intensity, intensity, 50)
-        secondary  = (50, intensity, intensity)
-        accent     = (50, 80, intensity)
+        primary    = (intensity, 220, 50)      # cyan-green
+        secondary  = (50, intensity, intensity) # pure cyan
+        accent     = (30, 60, intensity)        # deep blue accent
         dim        = (30, 80, 80)
 
         # --- body contour wireframe ---
@@ -132,7 +132,7 @@ class ExosuitOverlay:
 
         # --- shoulder pads ---
         shoulder_y  = by + int(bh * 0.15)
-        shoulder_w  = int(bw * 0.28)
+        shoulder_w  = int(bw * 0.20)
         shoulder_h  = int(bh * 0.08)
         pad_thick   = 2
 
@@ -159,7 +159,7 @@ class ExosuitOverlay:
                  dim, 1, cv2.LINE_AA)
 
         # --- chest piece ---
-        chest_y  = by + int(bh * 0.30)
+        chest_y  = by + int(bh * 0.38)
         chest_w  = int(bw * 0.45)
         chest_h  = int(bh * 0.22)
         chest_x  = cx - chest_w // 2
@@ -441,7 +441,12 @@ class ExosuitOverlay:
                     canvas, face, pulse,
                     self.ring_angle, consistency_score
                 )
-
+        
+        # flash on mode transition
+        if self.mode_stable == 11:   # exactly when mode switches
+            flash = canvas.copy()
+            cv2.rectangle(flash, (0, 0), (w, h), (200, 255, 200), -1)
+            cv2.addWeighted(flash, 0.15, canvas, 0.85, 0, canvas)
         # soft blend canvas onto frame so it doesn't look pasted on
         cv2.addWeighted(canvas, 0.88, frame, 0.12, 0, canvas)
         return canvas

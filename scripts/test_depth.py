@@ -12,6 +12,8 @@ from core.temporal_smoother import TemporalSmoother
 from ar.renderer import ARRenderer
 from ar.face_anchor import FaceAnchoredReticle
 from ar.exosuit import ExosuitOverlay
+from ar.exosuit import BodyMode
+
 
 def draw_hud(frame, position, mode, smoothing_on, consistency_score):
     h, w = frame.shape[:2]
@@ -79,10 +81,10 @@ def main():
     DISPLAY_H   = 225
 
     # cube state
-    position  = np.array([3.5,  0.5, 8.0], dtype=np.float32)
+    position  = np.array([-8.0, 0.5, 8.0], dtype=np.float32)
     rotation  = np.array([0.3,  0.5, 0.1], dtype=np.float32)
     rot_speed = np.array([0.005, 0.01, 0.002], dtype=np.float32)
-    scale     = 60.0
+    scale     = 45.0
     MOVE_STEP = 0.3
 
     # modes
@@ -164,16 +166,17 @@ def main():
         else:
             ar_frame = frame.copy()
 
-        # --- face-anchored reticle on top of AR frame ---
+        # --- face-anchored reticle — only in helmet/face mode ---
         depth_for_reticle = depth if depth is not None else np.full(
             (frame_h, frame_w), 0.5, dtype=np.float32
         )
-        ar_frame = reticle.render(
-            ar_frame,
-            cv2.resize(depth_for_reticle, (frame_w, frame_h)),
-            consistency_score,
-            dt=0.05
-        )
+        if exosuit.current_mode == BodyMode.FACE_ONLY:
+            ar_frame = reticle.render(
+                ar_frame,
+                cv2.resize(depth_for_reticle, (frame_w, frame_h)),
+                consistency_score,
+                dt=0.05
+            )
 
         # --- exosuit overlay ---
         mask_for_suit = mask if mask is not None else np.zeros(
