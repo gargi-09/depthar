@@ -24,6 +24,8 @@ DepthAR runs a four-stage pipeline on each webcam frame:
 The symbolic correction layer is the core contribution: depth and semantics fail at different locations, and combining them via explicit rules produces cleaner occlusion masks than either model alone.
 
 ---
+## Architecture
+[![Architecture diagram of gargi-09/depthar](https://gitdiagram.com/gargi-09/depthar/diagram.png)](https://gitdiagram.com/gargi-09/depthar?utm_source=readme&utm_medium=picture)
 
 ## Installation
 
